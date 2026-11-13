@@ -1,41 +1,46 @@
-{ lib
-, rustPlatform
-, fetchurl
-, avahi
-, pkg-config
+{
+  lib,
+  rustPlatform,
+  fetchFromGitHub,
+  pkg-config,
+  avahi,
+  maintainers,
 }:
 
-rustPlatform.buildRustPackage rec {
-  pname = "presswork";
+let
   version = "0.1.0";
+in
 
-  # fetchurl so the hash covers the release archive directly; switching to
-  # fetchFromGitHub is a mechanical follow-up if reviewers prefer it.
-  src = fetchurl {
-    url = "https://github.com/vindeckyy/presswork/archive/refs/tags/v${version}.tar.gz";
+rustPlatform.buildRustPackage {
+  pname = "presswork";
+  inherit version;
+
+  src = fetchFromGitHub {
+    owner = "vindeckyy";
+    repo = "presswork";
+    rev = "v${version}";
     hash = "sha256-dLSYJLv6LitBfuHKpglHQ8um+3/+C+cboObuOhZiEho=";
   };
 
-  cargoLock.lockFile = ./Cargo.lock;
+  cargoDeps = rustPlatform.importCargoLock {
+    lockFile = "${src}/Cargo.lock";
+  };
 
   nativeBuildInputs = [ pkg-config ];
   buildInputs = [ avahi ];
 
-  # The ipptool conformance suite needs a live daemon; run unit tests only.
   checkFlags = [ "--workspace" ];
 
   postInstall = ''
-    make install DESTDIR=$out PROFILE=release USER=lp GROUP=lp \
+    make install DESTDIR=$out PROFILE=release USER=root GROUP=root \
       SYSCONFDIR=/etc/cups SPOOLDIR=/var/spool/cups LOGDIR=/var/log/cups \
       CACHEDIR=/var/cache/cups RUNDIR=/run/cups
 
-    # The daemon installs units under usr/lib/systemd (FHS layout);
-    # nixpkgs' systemd.packages scan looks in $out/lib/systemd.
     mkdir -p $out/lib
     ln -s ../usr/lib/systemd $out/lib/systemd
   '';
 
-  meta = with lib; {
+  meta = {
     description = "Memory-safe CUPS 2.x-compatible print spooler and IPP scheduler in Rust";
     longDescription = ''
       presswork is a drop-in replacement for the CUPS scheduler (cupsd):
@@ -45,8 +50,8 @@ rustPlatform.buildRustPackage rec {
     '';
     homepage = "https://github.com/vindeckyy/presswork";
     changelog = "https://github.com/vindeckyy/presswork/blob/v${version}/CHANGELOG.md";
-    license = with licenses; [ mit asl20 ];
-    platforms = platforms.linux;
+    license = lib.licenses.asl20 or lib.licenses.mit;
+    platforms = lib.platforms.linux;
     mainProgram = "cupsd";
     maintainers = with maintainers; [ vindeckyy ];
   };
